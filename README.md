@@ -89,13 +89,17 @@ docker run -d \
 
 ## 📜 Bot Commands
 
-### Reaction Commands
+### Reaction & Utility Commands
 | Command | Type | Description | Permissions |
 | --- | --- | --- | --- |
 | `/leaderboard` or `!leaderboard` | Hybrid | Displays top users ranked by reactions gave, received, and emoticons used. | Everyone |
 | `/emoticons` or `!emoticons` | Hybrid | Displays dedicated ASCII emoticon leaderboard and most used emoticons. | Everyone |
 | `/stats [@user]` or `!stats [@user]` | Hybrid | Displays detailed reaction and emoticon stats & top emojis for a user. | Everyone |
 | `/scan [limit]` or `!scan [limit]` | Hybrid | Scans the allowed channel history for reactions and emoticons (default 100). | Administrator |
+| `/rate <parameter> <user>` | User Slash (External App) | Rates a user on any trait/parameter with a random decimal score (works in DMs & other servers). | Everyone |
+
+> 💡 **External App / User Install Setup:** To use `/rate` in DMs or other servers where the bot isn't added, go to **[Discord Developer Portal](https://discord.com/developers/applications)** -> your app -> **Installation**, enable **User Install**, and add `applications.commands` to scopes under Installation Contexts.
+
 
 
 ---

@@ -1,6 +1,8 @@
 import os
 import logging
+import random
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -347,8 +349,30 @@ async def stats(ctx: commands.Context, user: discord.Member = None):
     await ctx.send(embed=embed)
 
 
+# ----------------- EXTERNAL APP / USER SLASH COMMANDS -----------------
+
+@bot.tree.command(name="rate", description="Rates a user on a specified parameter with a random score.")
+@app_commands.allowed_installs(guilds=True, users=True)
+@app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+@app_commands.describe(parameter="The parameter or trait to rate the user on", user="The user to rate")
+async def rate(interaction: discord.Interaction, parameter: str, user: discord.User):
+    """Rates a user on a parameter with a random decimal from 0.01 to 100.00."""
+    rating = round(random.uniform(0.01, 100.00), 2)
+    
+    embed = discord.Embed(
+        title="🎲 Rating Generator",
+        description=f"{user.mention} is **{rating:.2f}** {parameter}",
+        color=discord.Color.purple()
+    )
+    if user.display_avatar:
+        embed.set_thumbnail(url=user.display_avatar.url)
+        
+    await interaction.response.send_message(embed=embed)
+
+
 if __name__ == "__main__":
     if not TOKEN:
         logger.error("DISCORD_TOKEN environment variable not set. Please check your .env file.")
     else:
         bot.run(TOKEN)
+
