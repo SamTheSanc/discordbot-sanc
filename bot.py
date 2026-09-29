@@ -360,8 +360,8 @@ async def rate(interaction: discord.Interaction, parameter: str, user: discord.U
     rating = round(random.uniform(0.01, 100.00), 2)
     
     embed = discord.Embed(
-        title="🎲 Rating Generator",
-        description=f"{user.mention} is **{rating:.2f}** {parameter}",
+        title=f"{parameter} Scanner",
+        description=f"{user.mention} is **{rating:.2f}%** {parameter}",
         color=discord.Color.purple()
     )
     if user.display_avatar:
