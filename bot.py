@@ -19,8 +19,17 @@ logger = logging.getLogger("reaction_bot")
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-PREFIX = os.getenv("COMMAND_PREFIX", "!")
 TARGET_CHANNEL_ID = int(os.getenv("TARGET_CHANNEL_ID", "1238775030444326952"))
+
+def get_env_whitelisted_users() -> set[int]:
+    """Parse comma-separated user IDs from the WHITELISTED_USERS environment variable."""
+    raw = os.getenv("WHITELISTED_USERS", "")
+    ids = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.add(int(part))
+    return ids
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -28,7 +37,69 @@ intents.members = True
 intents.reactions = True
 intents.guilds = True
 
-bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=commands.DefaultHelpCommand())
+# Slash commands only - prefix commands disabled
+bot = commands.Bot(command_prefix=(), intents=intents, help_command=None)
+
+# ----------------- WHITELIST AUTHORIZATION -----------------
+
+async def is_user_authorized(interaction: discord.Interaction) -> bool:
+    """Check if the user invoking the slash command is whitelisted or has admin rights."""
+    user_id = interaction.user.id
+
+    # 1. Check environment variable whitelist
+    if user_id in get_env_whitelisted_users():
+        return True
+
+    # 2. Check dynamic database whitelist
+    if await database.is_whitelisted_db(user_id):
+        return True
+
+    # 3. Server administrator
+    if interaction.guild and isinstance(interaction.user, discord.Member):
+        if interaction.user.guild_permissions.administrator:
+            return True
+
+    # 4. Bot application owner
+    try:
+        if await bot.is_owner(interaction.user):
+            return True
+    except Exception:
+        pass
+
+    return False
+
+def can_manage_whitelist(interaction: discord.Interaction) -> bool:
+    """Check if the user is authorized to manage the whitelist."""
+    if interaction.user.id in get_env_whitelisted_users():
+        return True
+    if interaction.guild and isinstance(interaction.user, discord.Member):
+        if interaction.user.guild_permissions.administrator:
+            return True
+    if bot.owner_id and interaction.user.id == bot.owner_id:
+        return True
+    if bot.owner_ids and interaction.user.id in bot.owner_ids:
+        return True
+    return False
+
+async def global_whitelist_check(interaction: discord.Interaction) -> bool:
+    """Restricts any slash command from executing unless the user is whitelisted."""
+    if not await is_user_authorized(interaction):
+        cmd_name = interaction.command.name if interaction.command else "unknown"
+        logger.info(
+            f"Unauthorized command /{cmd_name} attempted by {interaction.user} (ID: {interaction.user.id}) - command not sent."
+        )
+        return False
+    return True
+
+bot.tree.interaction_check = global_whitelist_check
+
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    """Handle slash command errors; silently drop unauthorized check failures so nothing sends."""
+    if isinstance(error, app_commands.CheckFailure):
+        # Silently drop: no message is sent to Discord
+        return
+    logger.error(f"Error handling slash command: {error}", exc_info=error)
 
 @bot.event
 async def on_ready():
@@ -123,8 +194,6 @@ async def on_message(message: discord.Message):
                 emoticons=emoticon_counts
             )
 
-    await bot.process_commands(message)
-
 @bot.event
 async def on_message_edit(before: discord.Message, after: discord.Message):
     if after.author.bot or after.channel.id != TARGET_CHANNEL_ID or not after.guild:
@@ -147,24 +216,25 @@ async def on_message_delete(message: discord.Message):
     if message.channel.id == TARGET_CHANNEL_ID:
         await database.delete_message_emoticons(message.id)
 
-# ----------------- COMMANDS -----------------
+# ----------------- SLASH COMMANDS -----------------
 
-@bot.hybrid_command(name="scan", description="Scan past messages in the allowed channel to index reactions and emoticons.")
-@commands.has_permissions(administrator=True)
-async def scan_channel(ctx: commands.Context, limit: int = 100):
+@bot.tree.command(name="scan", description="Scan past messages in the allowed channel to index reactions and emoticons.")
+@app_commands.describe(limit="Number of past messages to scan (default 100)")
+@app_commands.default_permissions(administrator=True)
+async def scan_channel(interaction: discord.Interaction, limit: int = 100):
     """Scans the allowed channel's past messages for reactions and ASCII emoticons."""
-    if not ctx.guild:
-        await ctx.send("This command can only be used in a server.")
+    if not interaction.guild:
+        await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
         return
 
-    await ctx.defer()
+    await interaction.response.defer()
     
     target_channel = bot.get_channel(TARGET_CHANNEL_ID)
     if not target_channel:
         try:
             target_channel = await bot.fetch_channel(TARGET_CHANNEL_ID)
         except Exception as e:
-            await ctx.send(f"❌ Unable to access target channel (`{TARGET_CHANNEL_ID}`): {e}")
+            await interaction.followup.send(f"❌ Unable to access target channel (`{TARGET_CHANNEL_ID}`): {e}")
             return
 
     count_messages = 0
@@ -182,7 +252,7 @@ async def scan_channel(ctx: commands.Context, limit: int = 100):
                 await database.add_reaction(
                     message_id=message.id,
                     channel_id=target_channel.id,
-                    guild_id=ctx.guild.id,
+                    guild_id=interaction.guild.id,
                     giver_id=user.id,
                     receiver_id=receiver_id,
                     emoji=emoji_str
@@ -196,7 +266,7 @@ async def scan_channel(ctx: commands.Context, limit: int = 100):
                 await database.record_emoticons(
                     message_id=message.id,
                     channel_id=target_channel.id,
-                    guild_id=ctx.guild.id,
+                    guild_id=interaction.guild.id,
                     user_id=message.author.id,
                     emoticons=emoticons_found
                 )
@@ -212,24 +282,24 @@ async def scan_channel(ctx: commands.Context, limit: int = 100):
         color=discord.Color.green()
     )
     embed.set_footer(text=f"Channel ID: {TARGET_CHANNEL_ID}")
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
 
-@bot.hybrid_command(name="leaderboard", description="View server top users by reactions and emoticons.")
-async def leaderboard(ctx: commands.Context):
+@bot.tree.command(name="leaderboard", description="View server top users by reactions and emoticons.")
+async def leaderboard(interaction: discord.Interaction):
     """Displays leaderboards for reactions gave/received and emoticons used."""
-    if not ctx.guild:
-        await ctx.send("Leaderboards are server-specific and cannot be run in DMs.")
+    if not interaction.guild:
+        await interaction.response.send_message("Leaderboards are server-specific and cannot be run in DMs.", ephemeral=True)
         return
 
-    await ctx.defer()
+    await interaction.response.defer()
     
-    top_givers = await database.get_top_givers(guild_id=ctx.guild.id, limit=10)
-    top_receivers = await database.get_top_receivers(guild_id=ctx.guild.id, limit=10)
-    top_emoticon_users = await database.get_top_emoticon_users(guild_id=ctx.guild.id, limit=10)
-    top_emoticons = await database.get_top_emoticons(guild_id=ctx.guild.id, limit=5)
+    top_givers = await database.get_top_givers(guild_id=interaction.guild.id, limit=10)
+    top_receivers = await database.get_top_receivers(guild_id=interaction.guild.id, limit=10)
+    top_emoticon_users = await database.get_top_emoticon_users(guild_id=interaction.guild.id, limit=10)
+    top_emoticons = await database.get_top_emoticons(guild_id=interaction.guild.id, limit=5)
     
     embed = discord.Embed(
-        title=f"🏆 Server Leaderboard — {ctx.guild.name}",
+        title=f"🏆 Server Leaderboard — {interaction.guild.name}",
         color=discord.Color.gold(),
         description=f"Rankings are strictly tracked from <#{TARGET_CHANNEL_ID}>."
     )
@@ -273,21 +343,21 @@ async def leaderboard(ctx: commands.Context):
         embed.add_field(name="✨ Most Popular ASCII Emoticons", value=top_emoticon_str, inline=False)
 
     embed.set_footer(text=f"Tracked channel ID: {TARGET_CHANNEL_ID}")
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
 
-@bot.hybrid_command(name="emoticons", description="View ASCII emoticon leaderboard and most used emoticons.")
-async def emoticons_leaderboard(ctx: commands.Context):
+@bot.tree.command(name="emoticons", description="View ASCII emoticon leaderboard and most used emoticons.")
+async def emoticons_leaderboard(interaction: discord.Interaction):
     """Displays dedicated ASCII emoticon leaderboard."""
-    if not ctx.guild:
-        await ctx.send("Leaderboards are server-specific and cannot be run in DMs.")
+    if not interaction.guild:
+        await interaction.response.send_message("Leaderboards are server-specific and cannot be run in DMs.", ephemeral=True)
         return
 
-    await ctx.defer()
-    top_emoticon_users = await database.get_top_emoticon_users(guild_id=ctx.guild.id, limit=10)
-    top_emoticons = await database.get_top_emoticons(guild_id=ctx.guild.id, limit=10)
+    await interaction.response.defer()
+    top_emoticon_users = await database.get_top_emoticon_users(guild_id=interaction.guild.id, limit=10)
+    top_emoticons = await database.get_top_emoticons(guild_id=interaction.guild.id, limit=10)
 
     embed = discord.Embed(
-        title=f"😊 ASCII Emoticon Leaderboard — {ctx.guild.name}",
+        title=f"😊 ASCII Emoticon Leaderboard — {interaction.guild.name}",
         color=discord.Color.teal(),
         description=f"Tracked usages (`:D`, `:)`, `:>`, `^-^`, `^~^`, `^_^`, etc.) in <#{TARGET_CHANNEL_ID}>."
     )
@@ -308,19 +378,20 @@ async def emoticons_leaderboard(ctx: commands.Context):
         embed.add_field(name="🔥 Top Used ASCII Emoticons", value=emoticon_list, inline=False)
 
     embed.set_footer(text=f"Tracked channel ID: {TARGET_CHANNEL_ID}")
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
 
-@bot.hybrid_command(name="stats", description="View reaction and ASCII emoticon stats for a user.")
-async def stats(ctx: commands.Context, user: discord.Member = None):
+@bot.tree.command(name="stats", description="View reaction and ASCII emoticon stats for a user.")
+@app_commands.describe(user="The user to view stats for (defaults to you)")
+async def stats(interaction: discord.Interaction, user: discord.Member = None):
     """Displays detailed reaction and emoticon statistics for a specified user."""
-    if not ctx.guild:
-        await ctx.send("Stats are server-specific and cannot be run in DMs.")
+    if not interaction.guild:
+        await interaction.response.send_message("Stats are server-specific and cannot be run in DMs.", ephemeral=True)
         return
 
-    target_user = user or ctx.author
-    await ctx.defer()
+    target_user = user or interaction.user
+    await interaction.response.defer()
     
-    user_data = await database.get_user_stats(user_id=target_user.id, guild_id=ctx.guild.id)
+    user_data = await database.get_user_stats(user_id=target_user.id, guild_id=interaction.guild.id)
     
     embed = discord.Embed(
         title=f"Reaction & Emoticon Stats — {target_user.display_name}",
@@ -346,7 +417,73 @@ async def stats(ctx: commands.Context, user: discord.Member = None):
         embed.add_field(name="Most Used Emoticons (ASCII)", value=top_emoticon_str, inline=False)
         
     embed.set_footer(text=f"Tracked channel ID: {TARGET_CHANNEL_ID}")
-    await ctx.send(embed=embed)
+    await interaction.followup.send(embed=embed)
+
+# ----------------- WHITELIST MANAGEMENT COMMANDS -----------------
+
+whitelist_group = app_commands.Group(name="whitelist", description="Manage user whitelist for bot commands")
+
+@whitelist_group.command(name="add", description="Add a user to the command whitelist")
+@app_commands.describe(user="The user to add to the whitelist")
+@app_commands.default_permissions(administrator=True)
+async def whitelist_add(interaction: discord.Interaction, user: discord.User):
+    if not can_manage_whitelist(interaction):
+        await interaction.response.send_message("❌ You do not have permission to manage the whitelist.", ephemeral=True)
+        return
+
+    added = await database.add_to_whitelist(user.id)
+    if added:
+        await interaction.response.send_message(f"✅ Added {user.mention} (`{user.id}`) to the command whitelist.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"ℹ️ {user.mention} (`{user.id}`) is already in the database whitelist.", ephemeral=True)
+
+@whitelist_group.command(name="remove", description="Remove a user from the command whitelist")
+@app_commands.describe(user="The user to remove from the whitelist")
+@app_commands.default_permissions(administrator=True)
+async def whitelist_remove(interaction: discord.Interaction, user: discord.User):
+    if not can_manage_whitelist(interaction):
+        await interaction.response.send_message("❌ You do not have permission to manage the whitelist.", ephemeral=True)
+        return
+
+    removed = await database.remove_from_whitelist(user.id)
+    env_ids = get_env_whitelisted_users()
+    if user.id in env_ids:
+        await interaction.response.send_message(
+            f"⚠️ Removed {user.mention} (`{user.id}`) from database whitelist, but this user is also defined in `.env` (`WHITELISTED_USERS`). Remove them from `.env` to fully revoke access.",
+            ephemeral=True
+        )
+    elif removed:
+        await interaction.response.send_message(f"✅ Removed {user.mention} (`{user.id}`) from the command whitelist.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"ℹ️ {user.mention} (`{user.id}`) is not in the database whitelist.", ephemeral=True)
+
+@whitelist_group.command(name="list", description="List all currently whitelisted users")
+@app_commands.default_permissions(administrator=True)
+async def whitelist_list(interaction: discord.Interaction):
+    db_users = await database.get_whitelist()
+    env_users = list(get_env_whitelisted_users())
+
+    embed = discord.Embed(
+        title="🛡️ Bot Command Whitelist",
+        color=discord.Color.blue(),
+        description="Users authorized to run bot slash commands."
+    )
+
+    if env_users:
+        env_text = "\n".join([f"• <@{uid}> (`{uid}`)" for uid in env_users])
+    else:
+        env_text = "*None configured in .env*"
+    embed.add_field(name="⚙️ Configured via `.env`", value=env_text, inline=False)
+
+    if db_users:
+        db_text = "\n".join([f"• <@{uid}> (`{uid}`)" for uid in db_users])
+    else:
+        db_text = "*No dynamic users added yet*"
+    embed.add_field(name="💾 Added via Slash Commands (Database)", value=db_text, inline=False)
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+bot.tree.add_command(whitelist_group)
 
 
 # ----------------- EXTERNAL APP / USER SLASH COMMANDS -----------------

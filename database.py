@@ -48,6 +48,14 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_emoticon_guild ON emoticons(guild_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_emoticon_channel ON emoticons(channel_id)")
 
+        # Create whitelist table
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS whitelist (
+                user_id INTEGER PRIMARY KEY,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Drop legacy alliances table if exists
         await db.execute("DROP TABLE IF EXISTS alliances")
 
@@ -56,6 +64,33 @@ async def init_db():
         await db.execute("DELETE FROM emoticons WHERE channel_id != ?", (TARGET_CHANNEL_ID,))
 
         await db.commit()
+
+async def add_to_whitelist(user_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        try:
+            await db.execute("INSERT INTO whitelist (user_id) VALUES (?)", (user_id,))
+            await db.commit()
+            return True
+        except aiosqlite.IntegrityError:
+            return False
+
+async def remove_from_whitelist(user_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("DELETE FROM whitelist WHERE user_id = ?", (user_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+
+async def get_whitelist() -> list[int]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT user_id FROM whitelist ORDER BY added_at ASC") as cursor:
+            rows = await cursor.fetchall()
+            return [row[0] for row in rows]
+
+async def is_whitelisted_db(user_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT 1 FROM whitelist WHERE user_id = ?", (user_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row is not None
 
 async def add_reaction(message_id: int, channel_id: int, guild_id: int, giver_id: int, receiver_id: int, emoji: str):
     if channel_id != TARGET_CHANNEL_ID:

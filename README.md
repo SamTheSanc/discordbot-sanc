@@ -20,7 +20,8 @@ A Python Discord bot built with `discord.py` and containerized with Docker. It t
   - 😊 **Emoticons Used**: Total ASCII emoticons typed in chat by a user.
 - **User Stats**: Detailed user summary including top used emojis, top received emojis, and top ASCII emoticons using `/stats`.
 - **Persistent Storage**: Data is saved to an SQLite database mounted via a Docker volume.
-- **Hybrid Commands**: Supports both Slash Commands (`/leaderboard`, `/emoticons`, `/scan`, `/stats`) and Prefix Commands (`!leaderboard`, `!emoticons`, `!scan`, `!stats`).
+- **Slash Commands Only**: Built completely on Discord slash commands (`/`) with no prefix required.
+- **Strict User Whitelist**: Only whitelisted users (and server administrators / bot owners) can use commands. If a non-whitelisted user attempts to run any command, the command will not send at all.
 
 ---
 
@@ -45,7 +46,9 @@ To read messages and reactions, enable the following in the **[Discord Developer
 2. Open `.env` and paste your Bot Token:
    ```env
    DISCORD_TOKEN=your_actual_discord_bot_token_here
-   COMMAND_PREFIX=!
+   TARGET_CHANNEL_ID=1238775030444326952
+   # Optional initial whitelisted Discord User IDs (comma-separated):
+   WHITELISTED_USERS=123456789012345678,987654321098765432
    ```
 
 ---
@@ -89,14 +92,19 @@ docker run -d \
 
 ## 📜 Bot Commands
 
-### Reaction & Utility Commands
+### Reaction & Utility Slash Commands
 | Command | Type | Description | Permissions |
 | --- | --- | --- | --- |
-| `/leaderboard` or `!leaderboard` | Hybrid | Displays top users ranked by reactions gave, received, and emoticons used. | Everyone |
-| `/emoticons` or `!emoticons` | Hybrid | Displays dedicated ASCII emoticon leaderboard and most used emoticons. | Everyone |
-| `/stats [@user]` or `!stats [@user]` | Hybrid | Displays detailed reaction and emoticon stats & top emojis for a user. | Everyone |
-| `/scan [limit]` or `!scan [limit]` | Hybrid | Scans the allowed channel history for reactions and emoticons (default 100). | Administrator |
-| `/rate <parameter> <user>` | User Slash (External App) | Rates a user on any trait/parameter with a random decimal score (works in DMs & other servers). | Everyone |
+| `/leaderboard` | Slash | Displays top users ranked by reactions gave, received, and emoticons used. | Whitelisted |
+| `/emoticons` | Slash | Displays dedicated ASCII emoticon leaderboard and most used emoticons. | Whitelisted |
+| `/stats [user]` | Slash | Displays detailed reaction and emoticon stats & top emojis for a user. | Whitelisted |
+| `/scan [limit]` | Slash | Scans the allowed channel history for reactions and emoticons (default 100). | Administrator |
+| `/rate <parameter> <user>` | User Slash (External App) | Rates a user on any trait/parameter with a random decimal score. | Whitelisted |
+| `/whitelist add <user>` | Slash | Adds a user to the dynamic database whitelist. | Administrator |
+| `/whitelist remove <user>` | Slash | Removes a user from the dynamic database whitelist. | Administrator |
+| `/whitelist list` | Slash | Displays all whitelisted users from `.env` and database. | Administrator |
+
+> 🔒 **Whitelist Enforcement**: If a user is not whitelisted, any command they attempt to run will silently fail without sending anything to Discord. Server administrators and users specified in `WHITELISTED_USERS` always have access.
 
 > 💡 **External App / User Install Setup:** To use `/rate` in DMs or other servers where the bot isn't added, go to **[Discord Developer Portal](https://discord.com/developers/applications)** -> your app -> **Installation**, enable **User Install**, and add `applications.commands` to scopes under Installation Contexts.
 
