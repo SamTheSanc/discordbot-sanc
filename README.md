@@ -10,14 +10,17 @@ A Python Discord bot built with `discord.py` and containerized with Docker. It t
 
 ## 🌟 Features
 
-- **Live Tracking**: Automatically counts reactions added or removed in real-time.
-- **Historical Channel Scanning**: Scans past messages in channels to index existing reactions using `/scan`.
-- **Dual Factor Leaderboard**: Visual leaderboard displaying rankings for:
-  - 📤 **Reactions Gave**: Total reactions added by a user.
-  - 📥 **Reactions Received**: Total reactions added to a user's messages.
-- **User Stats**: Detailed user reaction summary including top used and received emojis using `/stats`.
+- **Live Tracking**: Automatically counts emoji reactions and ASCII emoticons added or removed in real-time.
+- **ASCII Emoticon Counter**: Automatically detects and tallies emoticon usages like `:D`, `:)`, `:>`, `^-^`, `^~^`, `^_^`, `xd`, `uwu`, etc.
+- **Strict Channel Scoping**: Emoji reactions and ASCII emoticons are only tracked in the designated channel (`1238775030444326952`).
+- **Historical Channel Scanning**: Scans past messages in the channel to index existing reactions and emoticons using `/scan`.
+- **Multi-Factor Leaderboard**: Visual leaderboard displaying rankings for:
+  - 📤 **Reactions Gave**: Total emoji reactions added by a user.
+  - 📥 **Reactions Received**: Total emoji reactions added to a user's messages.
+  - 😊 **Emoticons Used**: Total ASCII emoticons typed in chat by a user.
+- **User Stats**: Detailed user summary including top used emojis, top received emojis, and top ASCII emoticons using `/stats`.
 - **Persistent Storage**: Data is saved to an SQLite database mounted via a Docker volume.
-- **Hybrid Commands**: Supports both Slash Commands (`/leaderboard`, `/scan`, `/stats`) and Prefix Commands (`!leaderboard`, `!scan`, `!stats`).
+- **Hybrid Commands**: Supports both Slash Commands (`/leaderboard`, `/emoticons`, `/scan`, `/stats`) and Prefix Commands (`!leaderboard`, `!emoticons`, `!scan`, `!stats`).
 
 ---
 
@@ -89,9 +92,10 @@ docker run -d \
 ### Reaction Commands
 | Command | Type | Description | Permissions |
 | --- | --- | --- | --- |
-| `/leaderboard` or `!leaderboard` | Hybrid | Displays top users ranked by reactions **gave** and **received**. | Everyone |
-| `/stats [@user]` or `!stats [@user]` | Hybrid | Displays detailed reaction stats & top emojis for a user. | Everyone |
-| `/scan [limit]` or `!scan [limit]` | Hybrid | Scans the channel history up to `limit` messages (default 100). | Administrator |
+| `/leaderboard` or `!leaderboard` | Hybrid | Displays top users ranked by reactions gave, received, and emoticons used. | Everyone |
+| `/emoticons` or `!emoticons` | Hybrid | Displays dedicated ASCII emoticon leaderboard and most used emoticons. | Everyone |
+| `/stats [@user]` or `!stats [@user]` | Hybrid | Displays detailed reaction and emoticon stats & top emojis for a user. | Everyone |
+| `/scan [limit]` or `!scan [limit]` | Hybrid | Scans the allowed channel history for reactions and emoticons (default 100). | Administrator |
 
 
 ---
@@ -101,6 +105,7 @@ docker run -d \
 ```
 ├── bot.py           # Main Discord bot code & commands
 ├── database.py      # SQLite database handler (aiosqlite)
+├── emoticons.py     # ASCII emoticon detection and tokenization
 ├── Dockerfile       # Container setup
 ├── docker-compose.yml # Docker Compose configuration
 ├── requirements.txt # Python dependencies
