@@ -90,7 +90,7 @@ Press **`Ctrl + C`** in your PowerShell terminal window.
 
 ## 🗑️ How to Reset Data (Wipe Database)
 
-If you want to clear all reaction stats and alliances on Windows:
+If you want to clear all reaction stats on Windows:
 
 ```powershell
 # 1. Stop Docker

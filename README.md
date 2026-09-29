@@ -1,6 +1,6 @@
 # Discord Reaction Tracker Bot 🤖
 
-A Python Discord bot built with `discord.py` and containerized with Docker. It tracks reactions given and received by users in a Discord channel, displays leaderboards for both factors, and includes an Alliance tracker to track server sizes across server groups.
+A Python Discord bot built with `discord.py` and containerized with Docker. It tracks reactions given and received by users in a Discord channel and displays leaderboards for both factors.
 
 ---
 
@@ -16,9 +16,8 @@ A Python Discord bot built with `discord.py` and containerized with Docker. It t
   - 📤 **Reactions Gave**: Total reactions added by a user.
   - 📥 **Reactions Received**: Total reactions added to a user's messages.
 - **User Stats**: Detailed user reaction summary including top used and received emojis using `/stats`.
-- **Alliance Tracker**: Group server IDs under named alliances and view aggregate member statistics.
 - **Persistent Storage**: Data is saved to an SQLite database mounted via a Docker volume.
-- **Hybrid Commands**: Supports both Slash Commands (`/leaderboard`, `/scan`, `/stats`, `/alliance`) and Prefix Commands (`!leaderboard`, `!scan`, `!stats`, `!alliance`).
+- **Hybrid Commands**: Supports both Slash Commands (`/leaderboard`, `/scan`, `/stats`) and Prefix Commands (`!leaderboard`, `!scan`, `!stats`).
 
 ---
 
@@ -94,13 +93,6 @@ docker run -d \
 | `/stats [@user]` or `!stats [@user]` | Hybrid | Displays detailed reaction stats & top emojis for a user. | Everyone |
 | `/scan [limit]` or `!scan [limit]` | Hybrid | Scans the channel history up to `limit` messages (default 100). | Administrator |
 
-### Alliance Commands
-| Command | Type | Description | Permissions |
-| --- | --- | --- | --- |
-| `/alliance <alliance_name>` | Hybrid | Displays total members and list of servers with member counts. | Everyone |
-| `/alliance_add <name> <server_id>` | Hybrid | Adds a Discord server ID to the specified alliance. | Administrator |
-| `/alliance_remove <name> <server_id>` | Hybrid | Removes a Discord server ID from an alliance. | Administrator |
-| `/alliance_list` | Hybrid | Lists all registered alliances. | Everyone |
 
 ---
 

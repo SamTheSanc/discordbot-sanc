@@ -29,15 +29,8 @@ async def init_db():
         await db.execute("CREATE INDEX IF NOT EXISTS idx_receiver ON reactions(receiver_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_guild ON reactions(guild_id)")
 
-        # Alliances table
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS alliances (
-                alliance_name TEXT NOT NULL,
-                guild_id INTEGER NOT NULL,
-                PRIMARY KEY (alliance_name, guild_id)
-            )
-        """)
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_alliance_name ON alliances(alliance_name)")
+        # Drop alliances table if exists to clean up associated data
+        await db.execute("DROP TABLE IF EXISTS alliances")
 
         await db.commit()
 
@@ -150,37 +143,3 @@ async def get_user_stats(user_id: int, guild_id: int):
             "top_received_emojis": top_received_emojis
         }
 
-# Alliance functions
-async def add_guild_to_alliance(alliance_name: str, guild_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """
-            INSERT OR IGNORE INTO alliances (alliance_name, guild_id)
-            VALUES (?, ?)
-            """,
-            (alliance_name.strip(), guild_id)
-        )
-        await db.commit()
-
-async def remove_guild_from_alliance(alliance_name: str, guild_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "DELETE FROM alliances WHERE LOWER(alliance_name) = LOWER(?) AND guild_id = ?",
-            (alliance_name.strip(), guild_id)
-        )
-        await db.commit()
-
-async def get_alliance_guilds(alliance_name: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute(
-            "SELECT guild_id FROM alliances WHERE LOWER(alliance_name) = LOWER(?)",
-            (alliance_name.strip(),)
-        ) as cursor:
-            rows = await cursor.fetchall()
-            return [row[0] for row in rows]
-
-async def list_alliances():
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute("SELECT DISTINCT alliance_name FROM alliances ORDER BY alliance_name ASC") as cursor:
-            rows = await cursor.fetchall()
-            return [row[0] for row in rows]

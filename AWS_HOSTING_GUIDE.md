@@ -244,7 +244,7 @@ The `docker-compose.yml` file is configured with `restart: always`. If the AWS E
 
 ## Step 7: Backing Up the SQLite Database to Windows
 
-Your bot's reaction statistics and alliances are stored in `./data/reactions.db`.
+Your bot's reaction statistics are stored in `./data/reactions.db`.
 
 To download a backup to your Windows machine, run this command in **Windows PowerShell**:
 
