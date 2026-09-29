@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  discord-bot:
+    build: .
+    container_name: reaction_tracker_bot
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
