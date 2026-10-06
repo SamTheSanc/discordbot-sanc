@@ -6,8 +6,9 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
-import database
+import database 
 from emoticons import extract_emoticons
+from music import user_has_music_role, setup_music_commands
 
 # Configure logging
 logging.basicConfig(
@@ -40,11 +41,18 @@ intents.guilds = True
 # Slash commands only - prefix commands disabled
 bot = commands.Bot(command_prefix=(), intents=intents, help_command=None)
 
+# Register music slash commands (/play, /queue, /volume, /afk, etc.)
+setup_music_commands(bot)
+
 # ----------------- WHITELIST AUTHORIZATION -----------------
 
 async def is_user_authorized(interaction: discord.Interaction) -> bool:
     """Check if the user invoking the slash command is whitelisted or has admin rights."""
     user_id = interaction.user.id
+
+    # 0. Check music role (ID: 1529365517247320114)
+    if user_has_music_role(interaction.user):
+        return True
 
     # 1. Check environment variable whitelist
     if user_id in get_env_whitelisted_users():
