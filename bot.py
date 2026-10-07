@@ -20,7 +20,7 @@ logger = logging.getLogger("reaction_bot")
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-TARGET_CHANNEL_ID = int(os.getenv("TARGET_CHANNEL_ID", "1238775030444326952"))
+TARGET_CHANNEL_ID = int(os.getenv("TARGET_CHANNEL_ID", "1238775030444326952"))ls -ld /home/sanc/Desktop/discordbot-sanc/env/bin/python
 
 def get_env_whitelisted_users() -> set[int]:
     """Parse comma-separated user IDs from the WHITELISTED_USERS environment variable."""
