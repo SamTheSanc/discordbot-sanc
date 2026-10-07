@@ -183,9 +183,9 @@ def get_music_manager(guild_id: int, bot: commands.Bot) -> GuildMusicManager:
 def setup_music_commands(bot: commands.Bot):
     """Registers music and AFK slash commands to the bot tree."""
 
-    @bot.tree.command(name="play", description="Play YouTube music or add a song to the queue.")
-    @app_commands.describe(query="YouTube video URL or search keywords")
-    async def play(interaction: discord.Interaction, query: str):
+    @bot.tree.command(name="join", description="Make the bot join a specific voice channel or your current channel.")
+    @app_commands.describe(channel="Voice channel for the bot to join (optional, defaults to your current channel)")
+    async def join_cmd(interaction: discord.Interaction, channel: discord.VoiceChannel | discord.StageChannel | None = None):
         if not await check_music_role(interaction):
             return
 
@@ -193,17 +193,60 @@ def setup_music_commands(bot: commands.Bot):
             await interaction.response.send_message("❌ Music commands can only be used in a server.", ephemeral=True)
             return
 
-        voice_state = interaction.user.voice
-        if not voice_state or not voice_state.channel:
-            await interaction.response.send_message("❌ You must be connected to a voice channel to use `/play`.", ephemeral=True)
+        manager = get_music_manager(interaction.guild.id, bot)
+        target_channel = channel
+        if not target_channel:
+            voice_state = interaction.user.voice
+            if voice_state and voice_state.channel:
+                target_channel = voice_state.channel
+
+        if not target_channel:
+            await interaction.response.send_message("❌ You must be in a voice channel or specify one to join.", ephemeral=True)
             return
 
         await interaction.response.defer()
-        manager = get_music_manager(interaction.guild.id, bot)
         manager.text_channel = interaction.channel if isinstance(interaction.channel, discord.TextChannel) else None
 
         try:
-            await manager.join_channel(voice_state.channel)
+            await manager.join_channel(target_channel)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Failed to join voice channel: {e}")
+            return
+
+        await interaction.followup.send(f"🔊 Joined {target_channel.mention}!")
+
+
+    @bot.tree.command(name="play", description="Play YouTube music or add a song to the queue.")
+    @app_commands.describe(
+        query="YouTube video URL or search keywords",
+        channel="Voice channel to join (optional, defaults to your current channel)"
+    )
+    async def play(interaction: discord.Interaction, query: str, channel: discord.VoiceChannel | discord.StageChannel | None = None):
+        if not await check_music_role(interaction):
+            return
+
+        if not interaction.guild or not isinstance(interaction.user, discord.Member):
+            await interaction.response.send_message("❌ Music commands can only be used in a server.", ephemeral=True)
+            return
+
+        manager = get_music_manager(interaction.guild.id, bot)
+        target_channel = channel
+        if not target_channel:
+            voice_state = interaction.user.voice
+            if voice_state and voice_state.channel:
+                target_channel = voice_state.channel
+            elif manager.voice_client and manager.voice_client.is_connected():
+                target_channel = manager.voice_client.channel
+
+        if not target_channel:
+            await interaction.response.send_message("❌ You must be connected to a voice channel or specify one to use `/play`.", ephemeral=True)
+            return
+
+        await interaction.response.defer()
+        manager.text_channel = interaction.channel if isinstance(interaction.channel, discord.TextChannel) else None
+
+        try:
+            await manager.join_channel(target_channel)
         except Exception as e:
             await interaction.followup.send(f"❌ Failed to join voice channel: {e}")
             return
@@ -311,7 +354,8 @@ def setup_music_commands(bot: commands.Bot):
 
 
     @bot.tree.command(name="afk", description="Bot stays in the voice channel without playing music.")
-    async def afk_cmd(interaction: discord.Interaction):
+    @app_commands.describe(channel="Voice channel for the bot to join (optional, defaults to your current channel)")
+    async def afk_cmd(interaction: discord.Interaction, channel: discord.VoiceChannel | discord.StageChannel | None = None):
         if not await check_music_role(interaction):
             return
 
@@ -319,17 +363,24 @@ def setup_music_commands(bot: commands.Bot):
             await interaction.response.send_message("❌ Music commands can only be used in a server.", ephemeral=True)
             return
 
-        voice_state = interaction.user.voice
-        if not voice_state or not voice_state.channel:
-            await interaction.response.send_message("❌ You must be in a voice channel for the bot to join in AFK mode.", ephemeral=True)
+        manager = get_music_manager(interaction.guild.id, bot)
+        target_channel = channel
+        if not target_channel:
+            voice_state = interaction.user.voice
+            if voice_state and voice_state.channel:
+                target_channel = voice_state.channel
+            elif manager.voice_client and manager.voice_client.is_connected():
+                target_channel = manager.voice_client.channel
+
+        if not target_channel:
+            await interaction.response.send_message("❌ You must be in a voice channel or specify one for the bot to join in AFK mode.", ephemeral=True)
             return
 
         await interaction.response.defer()
-        manager = get_music_manager(interaction.guild.id, bot)
         manager.text_channel = interaction.channel if isinstance(interaction.channel, discord.TextChannel) else None
 
         try:
-            vc = await manager.join_channel(voice_state.channel)
+            vc = await manager.join_channel(target_channel)
         except Exception as e:
             await interaction.followup.send(f"❌ Failed to join voice channel: {e}")
             return
@@ -339,7 +390,7 @@ def setup_music_commands(bot: commands.Bot):
 
         embed = discord.Embed(
             title="💤 Bot in AFK Mode",
-            description=f"Bot joined and is now staying in {voice_state.channel.mention} with no music playing.",
+            description=f"Bot joined and is now staying in {target_channel.mention} with no music playing.",
             color=discord.Color.dark_grey()
         )
         embed.set_footer(text="Use /play to play music or /stop to make the bot leave.")
