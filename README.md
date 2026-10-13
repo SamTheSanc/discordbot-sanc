@@ -49,6 +49,9 @@ To read messages and reactions, enable the following in the **[Discord Developer
    TARGET_CHANNEL_ID=1238775030444326952
    # Optional initial whitelisted Discord User IDs (comma-separated):
    WHITELISTED_USERS=123456789012345678,987654321098765432
+   # Configurable Role IDs
+   ADMIN_ROLE_ID=1529365517247320114
+   MUSIC_ROLE_ID=1529365517247320114
    ```
 
 ---
@@ -103,12 +106,14 @@ docker run -d \
 | `/whitelist add <user>` | Slash | Adds a user to the dynamic database whitelist. | Administrator |
 | `/whitelist remove <user>` | Slash | Removes a user from the dynamic database whitelist. | Administrator |
 | `/whitelist list` | Slash | Displays all whitelisted users from `.env` and database. | Administrator |
+| `/join [channel]` | Slash | Makes the bot join a specific voice channel or your current voice channel. | Whitelisted / Voice Role |
+| `/leave` | Slash | Makes the bot leave the voice channel. | Whitelisted / Voice Role |
+| `/verify [user]` | Slash | Verifies user (removes Newcomer, grants Member). If user omitted, selects most recent newcomer. Includes confirmation buttons. | Whitelisted / Manage Roles |
+| `/unverify <user>` | Slash | Unverifies user (removes Member, grants Newcomer). Requires Member role. Includes confirmation buttons. | Whitelisted / Manage Roles |
 
 > 🔒 **Whitelist Enforcement**: If a user is not whitelisted, any command they attempt to run will silently fail without sending anything to Discord. Server administrators and users specified in `WHITELISTED_USERS` always have access.
 
 > 💡 **External App / User Install Setup:** To use `/rate` in DMs or other servers where the bot isn't added, go to **[Discord Developer Portal](https://discord.com/developers/applications)** -> your app -> **Installation**, enable **User Install**, and add `applications.commands` to scopes under Installation Contexts.
-
-
 
 ---
 
@@ -116,6 +121,8 @@ docker run -d \
 
 ```
 ├── bot.py           # Main Discord bot code & commands
+├── verification.py  # Member verification & role management slash commands
+├── music.py         # Voice channel join and leave slash commands
 ├── database.py      # SQLite database handler (aiosqlite)
 ├── emoticons.py     # ASCII emoticon detection and tokenization
 ├── Dockerfile       # Container setup

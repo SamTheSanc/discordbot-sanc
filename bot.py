@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 import database 
 from emoticons import extract_emoticons
 from music import user_has_music_role, setup_music_commands
+from verification import setup_verification_commands
 
 # Configure logging
 logging.basicConfig(
@@ -21,6 +22,19 @@ load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 TARGET_CHANNEL_ID = int(os.getenv("TARGET_CHANNEL_ID", "1238775030444326952"))
+
+# ----------------- CONFIGURABLE ROLES -----------------
+# Admin role required for authentication / verification (/verify, /unverify) and bot administration
+ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID", "1529365517247320114"))
+
+# Music role required for music commands (/play, /queue, etc.)
+MUSIC_ROLE_ID = int(os.getenv("MUSIC_ROLE_ID", "1529365517247320114"))
+
+def user_has_admin_role(user: discord.User | discord.Member) -> bool:
+    """Checks if a user has the configured admin/auth role (ADMIN_ROLE_ID)."""
+    if isinstance(user, discord.Member):
+        return any(role.id == ADMIN_ROLE_ID for role in user.roles)
+    return False
 
 def get_env_whitelisted_users() -> set[int]:
     """Parse comma-separated user IDs from the WHITELISTED_USERS environment variable."""
@@ -44,30 +58,37 @@ bot = commands.Bot(command_prefix=(), intents=intents, help_command=None)
 # Register music slash commands (/play, /queue, /volume, /afk, etc.)
 setup_music_commands(bot)
 
+# Register verification slash commands (/verify, /unverify) using the configured admin role
+setup_verification_commands(bot, admin_role_id=ADMIN_ROLE_ID)
+
 # ----------------- WHITELIST AUTHORIZATION -----------------
 
 async def is_user_authorized(interaction: discord.Interaction) -> bool:
     """Check if the user invoking the slash command is whitelisted or has admin rights."""
     user_id = interaction.user.id
 
-    # 0. Check music role (ID: 1529365517247320114)
+    # 0. Check admin role (ADMIN_ROLE_ID)
+    if user_has_admin_role(interaction.user):
+        return True
+
+    # 1. Check music role (MUSIC_ROLE_ID)
     if user_has_music_role(interaction.user):
         return True
 
-    # 1. Check environment variable whitelist
+    # 2. Check environment variable whitelist
     if user_id in get_env_whitelisted_users():
         return True
 
-    # 2. Check dynamic database whitelist
+    # 3. Check dynamic database whitelist
     if await database.is_whitelisted_db(user_id):
         return True
 
-    # 3. Server administrator
+    # 4. Server administrator
     if interaction.guild and isinstance(interaction.user, discord.Member):
         if interaction.user.guild_permissions.administrator:
             return True
 
-    # 4. Bot application owner
+    # 5. Bot application owner
     try:
         if await bot.is_owner(interaction.user):
             return True
@@ -78,6 +99,8 @@ async def is_user_authorized(interaction: discord.Interaction) -> bool:
 
 def can_manage_whitelist(interaction: discord.Interaction) -> bool:
     """Check if the user is authorized to manage the whitelist."""
+    if user_has_admin_role(interaction.user):
+        return True
     if interaction.user.id in get_env_whitelisted_users():
         return True
     if interaction.guild and isinstance(interaction.user, discord.Member):
@@ -91,8 +114,13 @@ def can_manage_whitelist(interaction: discord.Interaction) -> bool:
 
 async def global_whitelist_check(interaction: discord.Interaction) -> bool:
     """Restricts any slash command from executing unless the user is whitelisted."""
+    cmd_name = interaction.command.name if interaction.command else "unknown"
+
+    # Verification commands handle their own role checks and send quiet ephemeral feedback
+    if cmd_name in ("verify", "unverify"):
+        return True
+
     if not await is_user_authorized(interaction):
-        cmd_name = interaction.command.name if interaction.command else "unknown"
         logger.info(
             f"Unauthorized command /{cmd_name} attempted by {interaction.user} (ID: {interaction.user.id}) - command not sent."
         )
